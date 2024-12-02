@@ -12,33 +12,14 @@ export default function Sockets() {
   const { getItemById } = useItems();
 
   useEffect(() => {
-    socket.current = io(`localhost:${REACT_APP_SERVER_PORT}`);
+    socket.current = io(`http://localhost:${REACT_APP_SERVER_PORT}`);
 
-    socket.current.on('DEFAULT_UPDATE', ({ itemId } = {}) => {
-      const msg = `New Webhook Event: Item ${itemId}: New Transactions Received`;
-      console.log(msg);
-      toast(msg);
-    });
-
-    socket.current.on('TRANSACTIONS_REMOVED', ({ itemId } = {}) => {
-      const msg = `New Webhook Event: Item ${itemId}: Transactions Removed`;
-      console.log(msg);
-      toast(msg);
-    });
-
-    socket.current.on('INITIAL_UPDATE', ({ itemId } = {}) => {
-      const msg = `New Webhook Event: Item ${itemId}: Initial Transactions Received`;
+    socket.current.on('SYNC_UPDATES_AVAILABLE', ({ itemId } = {}) => {
+      const msg = `New Webhook Event: Item ${itemId}: Transactions updates`;
       console.log(msg);
       toast(msg);
       getAccountsByItem(itemId);
       getTransactionsByItem(itemId);
-    });
-
-    socket.current.on('HISTORICAL_UPDATE', ({ itemId } = {}) => {
-      const msg = `New Webhook Event: Item ${itemId}: Historical Transactions Received`;
-      console.log(msg);
-      toast(msg);
-      getTransactionsByItem(itemId, true);
     });
 
     socket.current.on('ERROR', ({ itemId, errorCode } = {}) => {
@@ -49,10 +30,24 @@ export default function Sockets() {
     });
 
     socket.current.on('PENDING_EXPIRATION', ({ itemId } = {}) => {
-      const msg = `New Webhook Event: Item ${itemId}: Access consent is expiring in 7 days. User should re-enter login credentials.`;
+      const msg = `New Webhook Event: Item ${itemId}: Access consent is expiring in 7 days. To prevent this, User should re-enter login credentials.`;
       console.log(msg);
       toast(msg);
       getItemById(itemId, true);
+    });
+
+    socket.current.on('PENDING_DISCONNECT', ({ itemId } = {}) => {
+      const msg = `New Webhook Event: Item ${itemId}: Item will be disconnected in 7 days. To prevent this, User should re-enter login credentials.`;
+      console.log(msg);
+      toast(msg);
+      getItemById(itemId, true);
+    });
+
+
+
+    socket.current.on('NEW_TRANSACTIONS_DATA', ({ itemId } = {}) => {
+      getAccountsByItem(itemId);
+      getTransactionsByItem(itemId);
     });
 
     return () => {

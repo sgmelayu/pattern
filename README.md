@@ -4,11 +4,15 @@
 
 This is a sample Personal Finance Manager application demonstrating an end-to-end [Plaid][plaid] integration, focused on linking items and fetching transaction data. You can view a simplified version of this demonstration app at [pattern.plaid.com](https://pattern.plaid.com).
 
-The full Plaid Pattern collection of sample apps includes:
+The full Plaid collection of sample apps includes:
 
 [Plaid Pattern Personal Finance Manager](https://github.com/plaid/pattern/) (you are here) - Demonstrates the Plaid Transactions API
 
 [Plaid Pattern Account Funding App](https://github.com/plaid/pattern-account-funding) - Demonstrates the Plaid Auth, Balance, and Identity APIs
+
+[Plaid Transfer Quickstart App](https://github.com/plaid/transfer-quickstart) - Demonstrates the Transfer API (up to date)
+
+[Plaid Pattern Transfer App (deprecated)](https://github.com/plaid/pattern-transfers) - Demonstrates the Transfer API (this sample app is deprecated, use the Quickstart app instead)
 
 Plaid Pattern apps are provided for illustrative purposes and are not meant to be run as production applications.
 
@@ -16,6 +20,7 @@ Plaid Pattern apps are provided for illustrative purposes and are not meant to b
 
 -   [Docker][docker] Version 2.0.0.3 (31259) or higher, installed, running, and signed in. If you're on **Windows**, check out [this link][wsl] to get set up in WSL.
 -   [Plaid API keys][plaid-keys] - [sign up][plaid-signup] for a free Sandbox account if you don't already have one
+-   [Sign up for a free ngrok account](https://dashboard.ngrok.com/signup) to obtain an authtoken
 
 ## Getting Started
 
@@ -32,7 +37,9 @@ Note: We recommend running these commands in a unix terminal. Windows users can 
     ```
 1. Update the `.env` file with your [Plaid API keys][plaid-keys] and OAuth redirect uri (in sandbox this is 'http<span>://localhost:3001/oauth-link'</span>).
 
-1. You will also need to configure an allowed redirect URI for your client ID through the [Plaid developer dashboard](https://dashboard.plaid.com/team/api).
+1. Update the `ngrok.yml` file in the ngrok folder with your ngrok authtoken.
+
+1. (Optional, only required if testing OAuth with redirect URIs) You will also need to configure an allowed redirect URI for your client ID through the [Plaid developer dashboard](https://dashboard.plaid.com/team/api).
 
 1. Start the services. The first run may take a few minutes as Docker images are pulled/built for the first time.
     ```shell
@@ -99,21 +106,105 @@ By default, Plaid Link will let a user link to the same institution multiple tim
 
 ### Using webhooks to update transaction data and test update mode in Link.
 
-Plaid uses [webhooks][transactions-webhooks] to notify you whenever there are new transactions associated with an item. This allows you to make a call to Plaid's transactions endpoint only when there are new transactions available, rather than polling for them. For an example of this, see the [transactions webhook handler][transactions-handler]. This sample app also demonstrates the use of the sandboxItemResetLogin endpoint to test the webhook used to notify you when a user needs to update their login information at their financial institution.
+Plaid uses [webhooks][transactions-webhooks] to notify you whenever there are changes in the transactions associated with an item. This allows you to make a call to Plaid's transactions sync endpoint only when changes have occurred, rather than polling for them. For an example of this, see the [transactions webhook handler][transactions-handler]. This sample app also demonstrates the use of the sandboxItemResetLogin endpoint to test the webhook used to notify you when a user needs to update their login information at their financial institution.
 
-For webhooks to work, the server must be publicly accessible on the internet. For development purposes, this application uses [ngrok][ngrok-readme] to accomplish that. Therefore, if the server is re-started, any items created in this sample app previous to the current session will have a different webhook address attached to it. As a result, webhooks are only valid during the session in which an item is created; for previously created items, no transactions webhooks will be received, and no webhook will be received from the call to sandboxItemResetLogin.
+For webhooks to work, the server must be publicly accessible on the internet. For development purposes, this application uses [ngrok][ngrok-readme] to accomplish that. Therefore, if the server is re-started, any items created in this sample app previous to the current session will have a different webhook address attached to it. As a result, webhooks are only valid during the session in which an item is created; for previously created items, no transactions webhooks will be received, and no webhook will be received from the call to sandboxItemResetLogin. In addition, ngrok webhook addresses are only valid for 2 hours. If you are not receiving webhooks in this sample application, restart your server to reset the ngrok webhook address.
 
-### Updating transactions to remove pending transactions that have posted or cancelled
+### Creating and updating transactions to reflect new, modified and removed transactions.
 
-Upon receipt of a transactions webhook a call will be made to Plaid's transactions endpoint. Incoming transactions are compared to existing transactions. Any existing transactions that are not included in incoming transactions will be removed and any new transactions are added to the database. For an example, see the [handleTransactionsUpdate][transactions-handler] function.
+Upon the creation of a new item or receipt of the SYNC_UPDATES_AVAILABLE transactions webhook a call will be made to Plaid's transactions sync endpoint. This will return any changes to transactions that have occurred since you last called the endpoint (or all transactions upon creation of a new item). These changes are then reflected in the database. For an example, see the [update_transactions][update-transactions] file.
 
 ### Testing OAuth
 
-A redirect_uri parameter is included in the linkTokenCreate call and set in this sample app to the PLAID_SANDBOX_REDIRECT_URI you have set in the .env file (`http://localhost:3001/oauth-link`). This is the page that the user will be redirected to upon completion of the OAuth flow at their OAuth institution. When running in Production or Development, you will need to use an `https://` redirect URI, but a localhost http URI will work for Sandbox.
+A redirect_uri parameter is included in the linkTokenCreate call and set in this sample app to the PLAID_SANDBOX_REDIRECT_URI you have set in the .env file (`http://localhost:3001/oauth-link`). This is the page that the user will be redirected to upon completion of the OAuth flow at their OAuth institution. You will also need to configure `http://localhost:3001/oauth-link` as an allowed redirect URI for your client ID through the [Plaid developer dashboard](https://dashboard.plaid.com/team/api).
 
-You will also need to configure `http://localhost:3001/oauth-link` as an allowed redirect URI for your client ID through the [Plaid developer dashboard](https://dashboard.plaid.com/team/api).
+To test the OAuth flow in sandbox, choose 'Playtypus OAuth Bank' from the list of financial institutions in Plaid Link.
 
-To test the OAuth flow, choose 'Playtypus OAuth Bank' from the list of financial instutions in Plaid Link.
+If you want to test OAuth in Production, you need to use https and set `PLAID_PRODUCTION_REDIRECT_URI=https://localhost:3001/oauth-link` in `.env`. In order to run your localhost on https, you will need to create a self-signed certificate and add it to the client root folder. MacOS users can use the following instructions to do this. Note that self-signed certificates should be used for testing purposes only, never for actual deployments. Windows users can use [these instructions below](#windows-instructions-for-using-https-with-localhost).
+
+#### MacOS instructions for using https with localhost
+
+If you are using MacOS, in your terminal, change to the client folder:
+
+```bash
+cd client
+```
+
+Use homebrew to install mkcert:
+
+```bash
+brew install mkcert
+```
+
+Then create your certificate for localhost:
+
+```bash
+mkcert -install
+mkcert localhost
+```
+
+This will create a certificate file localhost.pem and a key file localhost-key.pem inside your client folder.
+
+Then in the package.json file in the client folder, replace this line on line 26
+
+```bash
+  "start": "PORT=3001 react-scripts start",
+```
+
+with this line instead:
+
+```bash
+"start": "PORT=3001 HTTPS=true SSL_CRT_FILE=localhost.pem SSL_KEY_FILE=localhost-key.pem react-scripts start",
+```
+
+In the `Dockerfile` in the client folder, add these two lines below line 6:
+
+```
+COPY ["localhost-key.pem", "/opt/client"]
+COPY ["localhost.pem", "/opt/client"]
+```
+
+Finally, in the wait-for-client.sh file in the main pattern folder, replace this line on line 6
+
+```bash
+while [ "$(curl -s -o /dev/null -w "%{http_code}" -m 1 localhost:3001)" != "200" ]
+```
+
+with this line instead:
+
+```bash
+while [ "$(curl -s -o /dev/null -w "%{http_code}" -m 1 https://localhost:3001)" != "200" ]
+```
+
+After starting up the Pattern sample app, you can now view it at https://localhost:3001.
+
+#### Windows instructions for using https with localhost
+
+If you are on a Windows machine, in the package.json file in the client folder, replace this line on line 26
+
+```bash
+  "start": "PORT=3001 react-scripts start",
+```
+
+with this line instead:
+
+```bash
+"start": "PORT=3001 HTTPS=true react-scripts start",
+```
+
+Then, in the wait-for-client.sh file in the main pattern folder, replace this line on line 6
+
+```bash
+while [ "$(curl -s -o /dev/null -w "%{http_code}" -m 1 localhost:3001)" != "200" ]
+```
+
+with this line instead:
+
+```bash
+while [ "$(curl -s -o /dev/null -w "%{http_code}" -m 1 https://localhost:3001)" != "200" ]
+```
+
+After starting up the Pattern sample app, you can now view it at https://localhost:3001. Your browser will alert you with an invalid certificate warning; click on "advanced" and proceed.
 
 ## Debugging
 
@@ -188,7 +279,7 @@ Browse to [localhost:4040](http://localhost:4040/inspect/http) to see the ngrok 
 
 Don’t want to use ngrok? As long as you serve the app with an endpoint that is publicly exposed, all the Plaid webhooks will work.
 
-ngrok's free account has a session limit of 8 hours. To fully test out some of the transaction webhook workflows, you will need to get a more persistent endpoint as noted above when using the development environment.
+ngrok's free account has a session limit of 8 hours. To fully test out some of the transaction webhook workflows, you will need to get a more persistent endpoint as noted above when using the Production environment.
 
 ## Source
 
@@ -233,6 +324,7 @@ Plaid Pattern is a demo app that is intended to be used only for the purpose of 
 [nodejs]: https://nodejs.org/en/
 [plaid-node]: https://github.com/plaid/plaid-node
 [transactions-handler]: /server/webhookHandlers/handleTransactionsWebhook.js
+[update-transactions]: /server/update_transactions.js
 [transactions-webhooks]: https://plaid.com/docs/#transactions-webhooks
 [users-routes]: server/routes/users.js
 [vscode-debugging]: https://code.visualstudio.com/docs/editor/debugging
@@ -247,7 +339,7 @@ Plaid Pattern is a demo app that is intended to be used only for the purpose of 
 [plaid-dashboard]: https://dashboard.plaid.com/team/api
 [plaid-docs]: https://plaid.com/docs/
 [plaid-help]: https://support.plaid.com/hc/en-us
-[plaid-keys]: https://dashboard.plaid.com/account/keys
+[plaid-keys]: https://dashboard.plaid.com/developers/keys
 [plaid-quickstart]: https://plaid.com/docs/quickstart/
 [plaid-signup]: https://dashboard.plaid.com/signup
 [plaid-support-ticket]: https://dashboard.plaid.com/support/new

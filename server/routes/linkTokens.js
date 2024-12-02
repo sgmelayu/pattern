@@ -10,14 +10,14 @@ const fetch = require('node-fetch');
 const { retrieveItemById } = require('../db/queries');
 const {
   PLAID_SANDBOX_REDIRECT_URI,
-  PLAID_DEVELOPMENT_REDIRECT_URI,
+  PLAID_PRODUCTION_REDIRECT_URI,
   PLAID_ENV,
 } = process.env;
 
 const redirect_uri =
   PLAID_ENV == 'sandbox'
     ? PLAID_SANDBOX_REDIRECT_URI
-    : PLAID_DEVELOPMENT_REDIRECT_URI;
+    : PLAID_PRODUCTION_REDIRECT_URI;
 const router = express.Router();
 
 router.post(
@@ -35,7 +35,7 @@ router.post(
       }
       const response = await fetch('http://ngrok:4040/api/tunnels');
       const { tunnels } = await response.json();
-      const httpTunnel = tunnels.find(t => t.proto === 'http');
+      const httpsTunnel = tunnels.find(t => t.proto === 'https');
       const linkTokenParams = {
         user: {
           // This should correspond to a unique id for the current user.
@@ -45,7 +45,7 @@ router.post(
         products,
         country_codes: ['US'],
         language: 'en',
-        webhook: httpTunnel.public_url + '/services/webhook',
+        webhook: httpsTunnel.public_url + '/services/webhook',
         access_token: accessToken,
       };
       // If user has entered a redirect uri in the .env file
